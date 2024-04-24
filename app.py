@@ -134,4 +134,4 @@ def generate_outfit():
 print(flask.__version__)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=False)
