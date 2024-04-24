@@ -33,11 +33,6 @@ from webcolors import (
    
     
 # load pre-trained models
-'''sub_model = tf.keras.models.load_model('model_sub')
-top_model = tf.keras.models.load_model('model_top')
-bottom_model = tf.keras.models.load_model('model_bottom')
-foot_model = tf.keras.models.load_model('model_shoes')'''
-
 sub_model_path    = "sub_model.pkl"
 top_model_path    = "top_base_model.pkl"
 bottom_model_path = "bottom_base_model.pkl"
