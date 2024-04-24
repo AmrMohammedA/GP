@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Outfit Generator</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        h1,
+        h2 {
+            text-align: center;
+        }
+
+        form {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 10px;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .file-input-label {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            display: inline-block;
+            margin-bottom: 10px;
+            /* Add margin to separate from the button */
+        }
+
+        button[type="button"] {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .confirmation-message {
+            color: green;
+            font-weight: bold;
+            margin-top: 10px;
+            /* Add margin to separate from the button */
+        }
+
+        img {
+            max-width: 100%;
+            height: auto;
+            margin: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Outfit Generator</h1>
+
+    <form enctype="multipart/form-data">
+        <label for="directory">Select a photo:</label>
+        <div>
+            <input type="file" name="directory" id="directory" accept=".jpg, .jpeg, .png" required>
+            <label class="file-input-label" for="directory">Choose File</label>
+        </div>
+        <button type="button" onclick="sendFilePath()">Add Photo</button>
+        <p class="confirmation-message" id="confirmationMessage"></p>
+    </form>
+
+    <form action="/generate_outfit" method="get">
+        <button type="submit">Generate Outfit</button>
+    </form>
+    
+    <hr>
+
+    {% if generated_outfit %}
+    <h2>Generated Outfit</h2>
+    <img src="uploads" alt="Top">
+    <img src="uploads" alt="Bottom">
+    <img src="uploads" alt="Shoes">
+    {% endif %}
+
+    <script>
+        const confirmationMessage = document.getElementById('confirmationMessage');
+        const fileInput = document.getElementById('directory');
+        const fileInputLabel = document.querySelector('.file-input-label');
+
+        fileInput.addEventListener('change', () => {
+            confirmationMessage.innerText = fileInput.files.length > 0 ? 'Photo added successfully' : '';
+        });
+
+        fileInput.addEventListener('change', () => {
+            fileInputLabel.innerText = fileInput.files.length > 0 ? fileInput.files[0].name : 'Choose File';
+        });
+
+        function sendFilePath() {
+            const formData = new FormData();
+            const file = fileInput.files[0];
+
+            if (file) {
+                formData.append('directory', file);
+
+                fetch('/add_photo', {
+                    method: 'POST',
+                    body: formData
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            console.log(data.message);
+                        } else {
+                            console.error(data.message);
+                        }
+                    })
+                    .catch(error => console.error('Error:', error));
+            } else {
+                console.error('No file selected.');
+            }
+        }
+    </script>
+
+</body>
+
+</html>

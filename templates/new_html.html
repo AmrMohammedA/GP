@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Classification</title>
+</head>
+<body>
+    <h1>Image Classification</h1>
+    <input type="file" id="imageInput" accept="image/*">
+    <button onclick="classifyImage()">Classify Image</button>
+    <p id="classificationResult"></p>
+
+    <script>
+        function classifyImage() {
+            var input = document.getElementById('imageInput');
+            var file = input.files[0];
+
+            var formData = new FormData();
+            formData.append('image', file);
+
+            fetch('/classify', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('classificationResult').innerText = `Type: ${data.type}\nInfo: ${data.info}`;
+            })
+            .catch(error => console.error('Error:', error));
+        }
+    </script>
+</body>
+</html>
