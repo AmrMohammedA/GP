@@ -1,150 +1,151 @@
-#for modeling
-import io
-import random
-from keras.preprocessing import  image
-#for read and show images
-import matplotlib.pyplot as plt
-import cv2                                                          
-import matplotlib.image as mpimg
-#for save and load models
-import tensorflow as tf
-from keras.models import load_model 
 import numpy as np
-#for color classification
-import colorsys                                                     
-import PIL.Image as Image
+import os
+import json
+from flask import request, Flask, render_template,  jsonify, send_from_directory
+import requests
+from outfit_generator import *
+from datetime import date, datetime
 
-from scipy.spatial import KDTree
-from webcolors import (
-   CSS3_HEX_TO_NAMES,
-    hex_to_rgb
-)
-   
-    
+app = Flask(__name__)
 
-sup_model = tf.keras.models.load_model('SUP')
-top_model = tf.keras.models.load_model('TOP')
-bottom_model = tf.keras.models.load_model('BOTTOM')
-foot_model = tf.keras.models.load_model('FOOT')
+@app.route('/static/<path:path>')
+def send_static(path):
+    return send_from_directory(path,'static')
 
+class OutfitGenerator:
+    def __init__(self):
+        self.top = []
+        self.bottom = []
+        self.shoes = []
 
+outfit_generator = OutfitGenerator()
+# Printing the outfit data
 
-# Clothing categories
-sub_list = ["bottom", "foot", "top"]
-top_list = [['Belts', 'Blazers', 'Dresses', 'Dupatta', 'Jackets', 'Kurtas', 'Kurtis', 'Lehenga Choli', 'Nehru Jackets', 'Rain Jacket', 'Rompers', 'Shirts', 'Shrug', 'Suspenders', 'Sweaters', 'Sweatshirts', 'Tops', 'Tshirts', 'Tunics', 'Waistcoat'],
-            ['Boys', 'Girls', 'Men', 'Unisex', 'Women'],
-            ['Black', 'Blue', 'Dark Blue', 'Dark Green', 'Dark Yellow', 'Green', 'Grey', 'Light Blue', 'Multi', 'Orange', 'Pink', 'Purple', 'Red', 'White', 'Yellow'],
-            ['Fall', 'Spring', 'Summer', 'Winter'],
-            ['Casual', 'Ethnic', 'Formal', 'Party', 'Smart Casual', 'Sports', 'Travel']]
-bottom_list = [['Capris', 'Churidar', 'Jeans', 'Jeggings', 'Leggings', 'Patiala', 'Salwar', 'Salwar and Dupatta', 'Shorts', 'Skirts', 'Stockings', 'Swimwear', 'Tights', 'Track Pants', 'Tracksuits', 'Trousers'],
-               ['Boys', 'Girls', 'Men', 'Unisex', 'Women'],
-               ['Black', 'Blue', 'Dark Blue', 'Dark Green', 'Dark Yellow', 'Grey', 'Light Blue', 'Multi', 'Orange', 'Pink', 'Purple', 'Red', 'White', 'Yellow'],
-               ['Fall', 'Spring', 'Summer', 'Winter'],
-               ['Casual', 'Ethnic', 'Formal', 'Smart Casual', 'Sports']]
-foot_list = [['Casual Shoes', 'Flats', 'Flip Flops', 'Formal Shoes', 'Heels', 'Sandals', 'Sports Sandals', 'Sports Shoes'],
-             ['Boys', 'Girls', 'Men', 'Unisex', 'Women'],
-             ['Black', 'Blue', 'Dark Blue', 'Dark Green', 'Dark Orange', 'Dark Yellow', 'Grey', 'Light Blue', 'Multi', 'Orange', 'Pink', 'Purple', 'Red', 'White', 'Yellow'],
-             ['Fall', 'Spring', 'Summer', 'Winter'],
-             ['Casual', 'Ethnic', 'Formal', 'Party', 'Smart Casual', 'Sports']]
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in {'png', 'jpg', 'jpeg', 'gif'}
 
-# Function to convert RGB to color names
-def convert_rgb_to_color_names(rgb_tuple):
-    css3_db = CSS3_HEX_TO_NAMES
-    names = []
-    rgb_values = []
-    for color_hex, color_name in css3_db.items():
-        names.append(color_name)
-        rgb_values.append(hex_to_rgb(color_hex))
-    
-    kdt_db = KDTree(rgb_values)
-    distance, index = kdt_db.query(rgb_tuple)
-    return names[index]
+@app.route('/add_photo', methods=['POST'])
+def add_photo():
+    try:
+        # Check if the request contains a URL parameter
+        if 'url' not in request.form:
+            return jsonify({'success': False, 'message': 'No URL provided'})
 
-# Function to get dominant color from an image
-def get_cloth_color(image):
-    max_score = 0.0001
-    dominant_color = None
-    for count, (r, g, b) in image.getcolors(image.size[0]*image.size[1]):
-        saturation = colorsys.rgb_to_hsv(r/255.0, g/255.0, b/255.0)[1]
-        y = min(abs(r*2104 + g*4130 + b*802 + 4096 + 131072) >> 13, 235)
-        y = (y - 16.0) / (235 - 16)
-        if y > 0.9:
-            continue
-        score = (saturation + 0.1) * count
-        if score > max_score:
-            max_score = score
-            dominant_color = (r, g, b)
-            
-    return convert_rgb_to_color_names(dominant_color)
+        # Extract the URL from the request
+        url = request.form['url']
 
-# Function for color classification
-def color_classification(single_path):
-    image = Image.open(single_path).convert('RGB')
-    return get_cloth_color(image)
+        # Download the image from the URL
+        response = requests.get(url)
+        if response.status_code != 200:
+            return jsonify({'success': False, 'message': 'Failed to download image from URL'})
 
-# Helper function for model prediction
-def model_prediction(train_images, my_model, lelist):
-    my_predictions = my_model.predict(train_images)
-    result = []
-    for i in range(len(lelist)):
-        type_predicted_label = np.argmax(my_predictions[i][0])
-        result.append(lelist[i][type_predicted_label])
-    return result
+        # Save the image to a temporary file
+        temp_filename = 'temp_image.jpg'
+        with open(temp_filename, 'wb') as f:
+            f.write(response.content)
 
-# Function for single image classification
-def image_classification(single_path):
-    train_images = np.zeros((1, 80, 60, 3))
-    img = cv2.imread(single_path)
-    if img.shape != (80, 60, 3):
-        img = image.load_img(single_path, target_size=(80, 60, 3))
-    train_images[0] = img
+        # Process the image using single_classification function
+        sub, info, res_place_holder = image_classification(temp_filename)
 
-    result2 = sub_list[np.argmax(sup_model.predict(train_images))]
-
-    if result2 == "bottom":
-        res = model_prediction(train_images, bottom_model, bottom_list)
-    elif result2 == "top":
-        res = model_prediction(train_images, top_model, top_list)
-    elif result2 == "foot":
-        res = model_prediction(train_images, foot_model, foot_list)
-    res.append(single_path)
-    res_str = f"{res[0]}, {res[1]}, {color_classification(single_path)}, {res[3]}, {res[4]}, {single_path}" 
-    return (result2, res_str, res)
-
-# Function to find complementary colors based on top color
-import random
-def find_combo_by_top(top_color_group, combotype):
-    # Map color group values to their respective ranges
-    def map_color_group(value):
-        if value >= 12:
-            return value - 12
-        elif value < 0:
-            return value + 12
+        # Add the processed image data to the appropriate list
+        if sub == "top":
+            outfit_generator.top.append((info, res_place_holder))
+        elif sub == "bottom":
+            outfit_generator.bottom.append((info, res_place_holder))
+        elif sub == "foot":
+            outfit_generator.shoes.append((info, res_place_holder))
+        json_data = {
+                    'Photo Path': info,
+                    'Output Data': res_place_holder
+                }
+        # Send a POST request to the backend endpoint
+        response = jsonify(json_data)
+        # Check if the request was successful
+        if response.status_code == 200:
+            return jsonify(json_data)
         else:
-            return value
+            return jsonify({'success': False, 'message': 'Failed to add photo to backend'})
+        # Delete the temporary file
+        os.remove(temp_filename)
 
-    co = int(combotype/30)
-
-    if top_color_group == 15: # If top color is multi
-        bottom_color_group = random.choice([12, 13, 14])
-        if bottom_color_group == 12: # If bottom color is black
-            shoes_color_group = 13 # Set shoes to be white
-        elif bottom_color_group == 13: # If bottom color is white
-            shoes_color_group = random.choice([12, 13, 14]) # Set shoes to be black, white, or grey
-        else: # If bottom color is grey
-            shoes_color_group = random.choice([12, 13]) # Set shoes to be black or white
-    elif top_color_group in [12, 13, 14]: # If top color is mono
-        if top_color_group == 12:
-            bottom_color_group = random.choice([12, 13])
-            shoes_color_group = 13 if bottom_color_group == 12 else random.choice([12, 13])
-        elif top_color_group == 13:
-            bottom_color_group = random.choice([12, 13])
-            shoes_color_group = 13 if bottom_color_group == 12 else 12
-        else:
-            bottom_color_group = random.choice([12, 13])
-            shoes_color_group = random.choice([12, 13])
+        return jsonify({'success': True, 'message': 'Image added successfully'})
+    except Exception as e:
+        print("Error in add_photo:", e)
+        return jsonify({'success': False, 'message': 'Internal server error'})
+    
+def get_season():
+    todays_date = date.today()
+    tomonth = todays_date.month
+    if tomonth in [3, 4, 5]:
+        return "Spring"
+    elif tomonth in [6, 7, 8]:
+        return "Summer"
+    elif tomonth in [9, 10, 11]:
+        return "Fall"
     else:
-        bottom_color_group = map_color_group(top_color_group - co)
-        shoes_color_group = map_color_group(top_color_group + co)
+        return "Winter"
 
-    return (map_color_group(bottom_color_group), map_color_group(shoes_color_group))
+@app.route('/receive_and_generate', methods=['POST'])
+def receive_and_generate():
+    try:
+        current_season = get_season()
+        data = request.json
+
+        # Validate the incoming data
+        if 'data' not in data:
+            return jsonify({'success': False, 'message': 'No data found'}), 400
+
+        # Process the incoming data
+        for item in data["data"]:
+            photo_path = item.get("photoPath", "")
+            output_data = item.get("outputData", [])
+            
+            list_type = item.get("listType")
+            if list_type == "top":
+                outfit_generator.top.append((photo_path, output_data))
+            elif list_type == "bottom":
+                outfit_generator.bottom.append((photo_path, output_data))
+            elif list_type == "foot":
+                outfit_generator.shoes.append((photo_path, output_data))
+            else:
+                return jsonify({'success': False, 'message': f'Invalid listType: {list_type}'}), 400
+
+        # Generate the outfit
+        top_right_season = [i for i in outfit_generator.top if i[1][3] == current_season]
+        ad_top = random.choice(top_right_season) if top_right_season else random.choice(outfit_generator.top)
+
+        # Use find_combo_by_top to determine the bottom and shoe color groups
+        top_color = ad_top[1][2]  # Assuming this is the color
+        color_group_mapping = {
+            'Black': 12, 'White': 13, 'Grey': 14, 'Multi': 15, 'Dark Blue': 0, 'Blue': 1, 'Light Blue': 2,
+            'Dark Green': 3, 'Green': 4, 'Dark Yellow': 5, 'Yellow': 6, 'Orange': 7, 'Pink': 8, 'Purple': 9,
+            'Red': 10, 'Dark Orange': 11
+        }
+
+        top_color_group = color_group_mapping.get(top_color, -1)
+        if top_color_group == -1:
+            return jsonify({'success': False, 'message': 'Invalid top color'}), 400
+
+        bottom_color_group, shoes_color_group = find_combo_by_top(top_color_group, 30)  # Adjust the combo type as needed
+
+        bottom_right_season = [i for i in outfit_generator.bottom if i[1][3] == current_season and color_group_mapping.get(i[1][2], -1) == bottom_color_group]
+        shoes_right_season = [i for i in outfit_generator.shoes if i[1][3] == current_season and color_group_mapping.get(i[1][2], -1) == shoes_color_group]
+
+        ad_bot = random.choice(bottom_right_season) if bottom_right_season else random.choice(outfit_generator.bottom)
+        ad_sho = random.choice(shoes_right_season) if shoes_right_season else random.choice(outfit_generator.shoes)
+
+        # Construct the response JSON
+        response = {
+            'top': ad_top[0],
+            'bottom': ad_bot[0],
+            'shoes': ad_sho[0]
+        }
+
+        return jsonify(response), 200
+    except Exception as e:
+        print("Error in receive_and_generate:", e)
+        return jsonify({'message': 'Failed to process data and generate outfit'}), 500
+
+if __name__ == '__main__':
+    app.run(debug=False)
