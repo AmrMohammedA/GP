@@ -4,7 +4,7 @@ import json
 from flask import request, Flask, render_template,  jsonify, send_from_directory
 import requests
 from outfit_generator import *
-from datetime import date, datetime
+from datetime import date, datetime  
 
 app = Flask(__name__)
 
@@ -12,11 +12,13 @@ app = Flask(__name__)
 def send_static(path):
     return send_from_directory(path,'static')
 
+
 class OutfitGenerator:
     def __init__(self):
         self.top = []
         self.bottom = []
         self.shoes = []
+
 
 outfit_generator = OutfitGenerator()
 # Printing the outfit data
@@ -28,48 +30,43 @@ def allowed_file(filename):
 @app.route('/add_photo', methods=['POST'])
 def add_photo():
     try:
-        # Check if the request contains a URL parameter
-        if 'url' not in request.form:
+        # Access the 'url' and 'type' parameters directly from the JSON data
+        image_url = request.json.get('url')
+
+        if not image_url:
             return jsonify({'success': False, 'message': 'No URL provided'})
 
-        # Extract the URL from the request
-        url = request.form['url']
-
-        # Download the image from the URL
-        response = requests.get(url)
+        # Fetch the image from the provided URL
+        response = requests.get(image_url)
+        
         if response.status_code != 200:
-            return jsonify({'success': False, 'message': 'Failed to download image from URL'})
+            return jsonify({'success': False, 'message': 'Failed to fetch image from URL'})
 
-        # Save the image to a temporary file
-        temp_filename = 'temp_image.jpg'
-        with open(temp_filename, 'wb') as f:
-            f.write(response.content)
+        # Read the image data into a NumPy array using OpenCV
+        image_data = np.asarray(bytearray(response.content), dtype=np.uint8)
+        img = cv2.imdecode(image_data, cv2.IMREAD_COLOR)
 
-        # Process the image using single_classification function
-        sub, info, res_place_holder = image_classification(temp_filename)
+        # Perform your existing logic with the image data
+        try:
+            sub, info, res_place_holder = image_classification(img, image_url)  # Pass the URL to the function
+            
+            if res_place_holder is None:
+                return jsonify({'success': False, 'message': 'Error in single classification'})
+            
+            # Prepare JSON data to send to the client
+            response_data = {
+                'success': True,
+                'message': 'Photo processed successfully',
+                'Photo Path': info,
+                'Output Data': res_place_holder,
+                'List Type': sub,
+            }
 
-        # Add the processed image data to the appropriate list
-        if sub == "top":
-            outfit_generator.top.append((info, res_place_holder))
-        elif sub == "bottom":
-            outfit_generator.bottom.append((info, res_place_holder))
-        elif sub == "foot":
-            outfit_generator.shoes.append((info, res_place_holder))
-        json_data = {
-                    'Photo Path': info,
-                    'Output Data': res_place_holder
-                }
-        # Send a POST request to the backend endpoint
-        response = jsonify(json_data)
-        # Check if the request was successful
-        if response.status_code == 200:
-            return jsonify(json_data)
-        else:
-            return jsonify({'success': False, 'message': 'Failed to add photo to backend'})
-        # Delete the temporary file
-        os.remove(temp_filename)
+            return jsonify(response_data)
 
-        return jsonify({'success': True, 'message': 'Image added successfully'})
+        except Exception as e:
+            print("Error in single_classification:", e)
+            return jsonify({'success': False, 'message': 'Error in single classification'})
     except Exception as e:
         print("Error in add_photo:", e)
         return jsonify({'success': False, 'message': 'Internal server error'})
