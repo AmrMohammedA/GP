@@ -26,7 +26,9 @@ outfit_generator = OutfitGenerator()
 def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in {'png', 'jpg', 'jpeg', 'gif'}
-
+@app.route('/')
+def index():
+    return render_template('indexx.html')
 @app.route('/add_photo', methods=['POST'])
 def add_photo():
     try:
@@ -134,9 +136,9 @@ def receive_and_generate():
 
         # Construct the response JSON
         response = {
-            'top': ad_top[0],
-            'bottom': ad_bot[0],
-            'shoes': ad_sho[0]
+            'top': ad_top[1],
+            'bottom': ad_bot[1],
+            'shoes': ad_sho[1]
         }
 
         return jsonify(response), 200
